@@ -16,7 +16,7 @@ class USB2CAN:
         """
         Odešle příkaz na USB2CAN adaptér.
         """
-        length = len(data)
+        length = len(data)  # Upraveno: Správná délka datové části zprávy
         message = [self.START_BYTE, command, length] + data
         self.ser.write(bytearray(message))
         time.sleep(0.1)
@@ -70,9 +70,21 @@ class USB2CAN:
         """
         try:
             dlc = len(data)  # Data Length Code (DLC)
-            message = [0x03, (can_id >> 8) & 0xFF, can_id & 0xFF, dlc]  # TX Frame Information, CAN ID, DLC
-            message += data  # CAN Data (max 8 bajtů)
-            self.send_command(64, message)  # WRITE_MESSAGE
+            if dlc > 8:
+                raise ValueError("Délka datového pole nemůže být větší než 8 bajtů.")
+            
+            # Sestavení CAN zprávy s identifikátorem a daty
+            id_high = (can_id >> 3) & 0xFF  # Horní část identifikátoru (ID), 8 bitů
+            id_low = (can_id & 0x07) << 5  # Dolních 3 bity identifikátoru, posunuty vlevo o 5 bitů
+            frame_info = 0x00  # Standardní rámec, žádné rozšířené ID ani RTR
+            
+            message = [frame_info, id_high, id_low, dlc] + data  # Frame info, Identifier, DLC a data
+            
+            length = len(message)  # Správná délka zprávy
+            full_message = [self.START_BYTE, 0x40, length] + message  # Přidání START_BYTE a příkazu WRITE_MESSAGE
+            
+            self.ser.write(bytearray(full_message))
+            time.sleep(0.1)
             print(f"CAN zpráva s ID {hex(can_id)} odeslána.")
         except Exception as e:
             print(f"Chyba při odesílání CAN zprávy: {e}")
