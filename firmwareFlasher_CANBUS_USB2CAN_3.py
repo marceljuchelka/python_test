@@ -2,8 +2,10 @@
 import sys
 sys.stdout.reconfigure(encoding='utf-8')
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from usb2can import USB2CAN, get_serial_ports  # Import knihovny
+import os
+import time
 
 class FirmwareUploaderApp:
     def __init__(self, root):
@@ -25,13 +27,13 @@ class FirmwareUploaderApp:
         self.configure_button = tk.Button(root, text="Konfigurovat adaptér", command=self.configure_adapter)
         self.configure_button.grid(row=2, column=0, columnspan=2, padx=10, pady=10)
 
-        # Tlačítko pro odeslání CAN zprávy
-        self.send_button = tk.Button(root, text="Odeslat CAN zprávu", command=self.send_can_message)
-        self.send_button.grid(row=3, column=0, columnspan=2, padx=10, pady=10)
+        # Tlačítko pro výběr souboru s firmwarem
+        self.select_file_button = tk.Button(root, text="Vyberte soubor s firmwarem", command=self.select_firmware_file)
+        self.select_file_button.grid(row=3, column=0, columnspan=2, padx=10, pady=10)
 
-        # Tlačítko pro čtení CAN zprávy
-        self.read_button = tk.Button(root, text="Přečíst CAN zprávu", command=self.read_can_message)
-        self.read_button.grid(row=4, column=0, columnspan=2, padx=10, pady=10)
+        # Tlačítko pro flashování firmware
+        self.flash_button = tk.Button(root, text="Flashovat firmware", command=self.flash_firmware)
+        self.flash_button.grid(row=4, column=0, columnspan=2, padx=10, pady=10)
 
         # Tlačítko pro odpojení sériového portu
         self.disconnect_button = tk.Button(root, text="Odpojit adaptér", command=self.disconnect_adapter)
@@ -42,6 +44,7 @@ class FirmwareUploaderApp:
         self.status_label.grid(row=6, column=0, columnspan=2, padx=10, pady=5)
 
         self.usb2can = None
+        self.firmware_file_path = None
 
     def update_status(self, text, color="blue"):
         self.status_label.config(text=f"Stav: {text}", fg=color)
@@ -69,27 +72,45 @@ class FirmwareUploaderApp:
         except Exception as e:
             self.update_status(f"Chyba při konfiguraci: {e}", "red")
 
-    def send_can_message(self):
+    def select_firmware_file(self):
+        self.firmware_file_path = filedialog.askopenfilename(filetypes=[("Binární soubory", "*.bin")])
+        if self.firmware_file_path:
+            self.update_status(f"Vybraný soubor: {os.path.basename(self.firmware_file_path)}", "green")
+        else:
+            self.update_status("Žádný soubor nebyl vybrán", "red")
+
+    def flash_firmware(self):
         if not self.usb2can:
             messagebox.showwarning("Chyba", "Adaptér není nakonfigurován.")
             return
 
-        try:
-            self.usb2can.send_can_message(0x11, [1, 2, 3, 4, 5 ,6 , 7, 8])
-            self.update_status("CAN zpráva odeslána", "green")
-        except Exception as e:
-            self.update_status(f"Chyba při odesílání CAN zprávy: {e}", "red")
-
-    def read_can_message(self):
-        if not self.usb2can:
-            messagebox.showwarning("Chyba", "Adaptér není nakonfigurován.")
+        if not self.firmware_file_path:
+            messagebox.showwarning("Chyba", "Žádný soubor s firmwarem nebyl vybrán.")
             return
 
         try:
-            self.usb2can.read_can_message()
-            self.update_status("CAN zpráva přečtena", "green")
+            # Odeslat heslo pro inicializaci komunikace
+            self.usb2can.send_can_message(0x11, [0xFE, 0xED, 0xFA, 0xCE, 0xCA, 0xFE, 0xBE, 0xEF])  # Heslo pro endianitu
+            time.sleep(0.1)
+
+            # Přečíst odpověď od bootloaderu
+            response = self.usb2can.read_can_message()
+            if response:
+                self.update_status("Bootloader potvrzen, začínám flashování", "green")
+            else:
+                self.update_status("Chyba: Bootloader nepotvrdil přijetí hesla", "red")
+                return
+
+            with open(self.firmware_file_path, "rb") as firmware_file:
+                data = firmware_file.read()
+                # Rozdělit data na části, které lze poslat přes CAN (max 8 bajtů na zprávu)
+                for i in range(0, len(data), 8):
+                    chunk = data[i:i+8]
+                    self.usb2can.send_can_message(0x11, list(chunk))
+                    time.sleep(0.01)  # Krátká pauza mezi zprávami
+                self.update_status("Firmware úspěšně nahrán", "green")
         except Exception as e:
-            self.update_status(f"Chyba při čtení CAN zprávy: {e}", "red")
+            self.update_status(f"Chyba při flashování: {e}", "red")
 
     def disconnect_adapter(self):
         if self.usb2can:
@@ -105,4 +126,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = FirmwareUploaderApp(root)
     root.mainloop()
-
