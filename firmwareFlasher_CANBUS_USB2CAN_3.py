@@ -76,11 +76,11 @@ class USB2CAN:
             # Sestavení CAN zprávy s identifikátorem a daty
             id_high = (can_id >> 3) & 0xFF  # Horní část identifikátoru (ID), 8 bitů
             id_low = (can_id & 0x07) << 5  # Dolních 3 bity identifikátoru, posunuty vlevo o 5 bitů
-            frame_info = 0x00  # Standardní rámec, žádné rozšířené ID ani RTR
+            frame_info = dlc  # Standardní rámec, délka datového pole (DLC)
             
-            message = [frame_info, id_high, id_low, dlc] + data  # Frame info, Identifier, DLC a data
+            message = [frame_info, id_high, id_low] + data  # Frame info, Identifier, a data
             
-            length = len(message)  # Správná délka zprávy
+            length = len(message)  # Správná délka zprávy (včetně frame_info)
             full_message = [self.START_BYTE, 0x40, length] + message  # Přidání START_BYTE a příkazu WRITE_MESSAGE
             
             self.ser.write(bytearray(full_message))
@@ -184,7 +184,7 @@ class FirmwareUploaderApp:
             return
 
         try:
-            self.usb2can.send_can_message(0x11, [0x22, 0x33, 0x44, 0x55])
+            self.usb2can.send_can_message(0x12, [0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28])
             self.update_status("CAN zpráva odeslána", "green")
         except Exception as e:
             self.update_status(f"Chyba při odesílání CAN zprávy: {e}", "red")
