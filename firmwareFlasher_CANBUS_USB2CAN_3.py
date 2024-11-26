@@ -89,13 +89,13 @@ class FirmwareUploaderApp:
             return
 
         try:
-            # Odeslat heslo pro inicializaci komunikace
-            self.usb2can.send_can_message(0x11, [0xFE, 0xED, 0xFA, 0xCE, 0xCA, 0xFE, 0xBE, 0xEF])  # Heslo pro endianitu
+            # Odeslat heslo pro inicializaci komunikace v jedné zprávě na ID 0x11
+            self.usb2can.send_can_message(0x11, [0xFE, 0xED, 0xFA, 0xCE, 0xCA, 0xFE, 0xBE, 0xEF])  # Kombinované heslo
             time.sleep(0.1)
 
-            # Přečíst odpověď od bootloaderu
-            response = self.usb2can.read_can_message()
-            if response:
+            # Přečíst odpověď od bootloaderu s prodlouženým timeoutem
+            response = self.read_bootloader_response()
+            if response and response[0] == 0x01:  # Kontrola, jestli odpověď začíná potvrzením
                 self.update_status("Bootloader potvrzen, začínám flashování", "green")
             else:
                 self.update_status("Chyba: Bootloader nepotvrdil přijetí hesla", "red")
@@ -111,6 +111,15 @@ class FirmwareUploaderApp:
                 self.update_status("Firmware úspěšně nahrán", "green")
         except Exception as e:
             self.update_status(f"Chyba při flashování: {e}", "red")
+
+    def read_bootloader_response(self):
+        # Opakované pokusy o čtení odpovědi s prodlouženým timeoutem
+        for _ in range(10):
+            response = self.usb2can.read_can_message()
+            if response:
+                return response
+            time.sleep(0.1)  # Pauza mezi pokusy
+        return None
 
     def disconnect_adapter(self):
         if self.usb2can:

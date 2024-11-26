@@ -18,8 +18,11 @@ class USB2CAN:
         length = len(data)  # Upraveno: Správná délka datové části zprávy
         message = [self.START_BYTE, command, length] + data
         self.ser.write(bytearray(message))
+        print(f"Odesílám: {bytearray(message).hex()}")  # Přidán výpis odeslaných dat
         time.sleep(0.1)
-        return self.ser.read(self.ser.in_waiting)
+        response = self.ser.read(self.ser.in_waiting)
+        print(f"Odpověď ze send_command: {response.hex()}")
+        return response
 
     def configure_usb2can(self):
         """
@@ -59,7 +62,7 @@ class USB2CAN:
             # 10. Nastavit režim registru Mode
             self.send_command(18, [0x00, 0x00])  # WRITE_REG: Mode register (address 0) = 0x00
 
-            print("USB2CAN adaptér úspěšně inicializován jako převodník.")
+            print("USB2CAN adaptér úšpěšně inicializován jako převodník.")
         except Exception as e:
             print(f"Chyba při konfiguraci: {e}")
 
@@ -83,30 +86,50 @@ class USB2CAN:
             full_message = [self.START_BYTE, 0x40, length] + message  # Přidání START_BYTE a příkazu WRITE_MESSAGE
             
             self.ser.write(bytearray(full_message))
-            time.sleep(0.1)
+            print(f"Odesílám CAN zprávu: {bytearray(full_message).hex()}")  # Přidán výpis odeslané CAN zprávy
             print(f"CAN zpráva s ID {hex(can_id)} odeslána.")
+            response = self.ser.read(self.ser.in_waiting)
+            print(f"Odpověď po odeslání CAN zprávy: {response.hex()}")  # Přidán výpis přijaté odpovědi
         except Exception as e:
             print(f"Chyba při odesílání CAN zprávy: {e}")
 
     def read_can_message(self):
         """
-        Přečte CAN zprávu z adaptéru.
+        Přečte CAN zprávu z adaptéru pomocí příkazu READ_MESSAGE.
         """
         try:
             self.send_command(65)  # READ_MESSAGE command
-            data = self.ser.read(self.ser.in_waiting)
+            data = self.ser.read(self.ser.in_waiting)  # Číst všechna dostupná data
             if data:
                 print(f"Přijatá CAN zpráva: {data.hex()}")
+                return data
             else:
                 print("Žádná CAN zpráva nebyla přijata.")
         except Exception as e:
             print(f"Chyba při čtení CAN zprávy: {e}")
+        return None
+
+    def reset_usb2can(self):
+        """
+        Resetuje USB2CAN adaptér.
+        """
+        try:
+            # Přepnout do konfiguračního módu
+            self.send_command(2)  # CONFIG_MODE
+            self.send_command(1)  # BOOT_MODE
+            # Resetovat adaptér
+            self.send_command(18, [0x00, 0x01])  # WRITE_REG: Mode register (address 0) = 0x01 (reset mode)
+            print("Adaptér byl resetován.")
+        except Exception as e:
+            print(f"Chyba při resetování adaptéru: {e}")
 
     def close(self):
         """
         Uzavře sériové spojení.
         """
-        self.ser.close()
+        self.reset_usb2can()  # Reset před odpojením
+        if self.ser and self.ser.is_open:
+            self.ser.close()
 
 # Funkce pro získání seznamu sériových portů
 def get_serial_ports():
@@ -116,13 +139,19 @@ def get_serial_ports():
 
 # Příklad použití knihovny
 if __name__ == "__main__":
-    ports = get_serial_ports()
-    if not ports:
-        print("Žádné sériové porty nebyly nalezeny.")
-    else:
-        port = ports[0]  # Vybrat první nalezený port
-        usb2can = USB2CAN(port)
-        usb2can.configure_usb2can()
-        usb2can.send_can_message(0x11, [0x22, 0x33, 0x44, 0x55])
-        usb2can.read_can_message()
-        usb2can.close()
+    port = "COM5"
+    baud_rate = 500000  # Zvýšená rychlost
+    usb2can = USB2CAN(port, baud_rate)
+    usb2can.configure_usb2can()
+    
+    # Odeslat kombinované heslo
+    usb2can.send_can_message(0x11, [0xFE, 0xED, 0xFA, 0xCE, 0xCA, 0xFE, 0xBE, 0xEF])
+    
+    # Opakované načítání odpovědi
+    for _ in range(10):
+        response = usb2can.read_can_message()
+        if response:
+            print(f"Odpověď: {response.hex()}")
+        time.sleep(0.001)  # Krátká pauza mezi pokusy o čtení
+    
+    usb2can.close()
