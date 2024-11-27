@@ -1,175 +1,107 @@
-#knihovna pro usb2can
-
 # -*- coding: utf-8 -*-
 import sys
 sys.stdout.reconfigure(encoding='utf-8')
-import serial
-import time
+import tkinter as tk
+from tkinter import ttk, messagebox
+from usb2can import USB2CAN, get_serial_ports  # Import knihovny
 
-class USB2CAN:
-    def __init__(self, port, baudrate=115200):
-        self.ser = serial.Serial(port, baudrate, timeout=1)
-        self.START_BYTE = 0x0F
+class FirmwareUploaderApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("USB2CAN Konfigurace a Ovládání")
 
-    def send_command(self, command, data=[]):
-        """
-        Odešle příkaz na USB2CAN adaptér.
-        """
-        length = len(data)  # Upraveno: Správná délka datové části zprávy
-        message = [self.START_BYTE, command, length] + data
-        self.ser.write(bytearray(message))
-        print(f"Odesílám: {bytearray(message).hex()}")  # Přidán výpis odeslaných dat
-        time.sleep(0.1)
-        response = self.ser.read(self.ser.in_waiting)
-        print(f"Odpověď ze send_command: {response.hex()}")
-        return response
+        # Label a seznam sériových portů
+        tk.Label(root, text="Vyberte COM port:").grid(row=0, column=0, padx=10, pady=5)
+        self.port_var = tk.StringVar()
+        self.port_menu = tk.OptionMenu(root, self.port_var, *get_serial_ports())
+        self.port_menu.grid(row=0, column=1, padx=10, pady=5)
 
-    def configure_usb2can(self):
-        """
-        Inicializace adaptéru USB2CAN do normálního režimu.
-        """
+        # Nastavení parametrů sériového portu
+        tk.Label(root, text="Rychlost (baud rate):").grid(row=1, column=0, padx=10, pady=5)
+        self.baud_rate_var = tk.StringVar(value="115200")
+        tk.Entry(root, textvariable=self.baud_rate_var).grid(row=1, column=1, padx=10, pady=5)
+
+        # Tlačítko pro konfiguraci adaptéru
+        self.configure_button = tk.Button(root, text="Konfigurovat adaptér", command=self.configure_adapter)
+        self.configure_button.grid(row=2, column=0, columnspan=2, padx=10, pady=10)
+
+        # Tlačítko pro odeslání CAN zprávy
+        self.send_button = tk.Button(root, text="Odeslat CAN zprávu", command=self.send_can_message)
+        self.send_button.grid(row=3, column=0, columnspan=2, padx=10, pady=10)
+
+        # Tlačítko pro čtení CAN zprávy
+        self.read_button = tk.Button(root, text="Přečíst CAN zprávu", command=self.read_can_message)
+        self.read_button.grid(row=4, column=0, columnspan=2, padx=10, pady=10)
+
+        # Tlačítko pro odpojení sériového portu
+        self.disconnect_button = tk.Button(root, text="Odpojit adaptér", command=self.disconnect_adapter)
+        self.disconnect_button.grid(row=5, column=0, columnspan=2, padx=10, pady=10)
+
+        # Stavové štítky
+        self.status_label = tk.Label(root, text="Stav: Čekání na akci", fg="blue")
+        self.status_label.grid(row=6, column=0, columnspan=2, padx=10, pady=5)
+
+        self.usb2can = None
+
+    def update_status(self, text, color="blue"):
+        self.status_label.config(text=f"Stav: {text}", fg=color)
+        self.root.update_idletasks()
+
+    def configure_adapter(self):
+        port = self.port_var.get()
+        baud_rate = self.baud_rate_var.get()
+        print(f"Konfiguruji adaptér na portu: {port}, s rychlostí: {baud_rate}")
+        
+        if not port:
+            messagebox.showwarning("Chyba", "Vyberte COM port.")
+            return
+
         try:
-            # 1. Nastavit konfigurační mód
-            self.send_command(2)  # CONFIG_MODE
+            baud_rate = int(baud_rate)
+        except ValueError:
+            messagebox.showerror("Chyba", "Neplatné nastavení baud rate.")
+            return
 
-            # 2. Reset mód
-            self.send_command(18, [0x00, 0x01])  # WRITE_REG: Mode register (address 0) = 0x01
-
-            # 3. Nastavit Clock Divider
-            self.send_command(18, [0x1C, 0xC0])  # WRITE_REG: Clock Divider (address 0x1C) = 0xC0
-
-            # 4. Nastavit filtry (žádné filtrování)
-            self.send_command(18, [0x04, 0x00])  # WRITE_REG: Acceptance Code (address 0x04) = 0x00
-            self.send_command(18, [0x05, 0xFF])  # WRITE_REG: Acceptance Mask (address 0x05) = 0xFF
-
-            # 5. Nastavit Output Control
-            self.send_command(18, [0x1A, 0xDA])  # WRITE_REG: Output Control (address 0x1A) = 0xDA
-
-            # 6. Nastavit Interrupt Enable
-            self.send_command(18, [0x0C, 0x03])  # WRITE_REG: Interrupt Enable (address 0x0C) = 0x03
-
-            # 7. Nastavit Bus Timing
-            self.send_command(18, [0x06, 0x00])  # WRITE_REG: Bus Timing 0 (address 0x06) = 0x00
-            self.send_command(18, [0x07, 0x1C])  # WRITE_REG: Bus Timing 1 (address 0x07) = 0x1C
-            
-            # 8. Nastavit parametry CMD_TRANSMIT_CRITICAL_LIMIT a CMD_TRANSMIT_READY_LIMIT
-            self.send_command(32, [0x00, 18])  # CMD_TRANSMIT_CRITICAL_LIMIT = 18
-            self.send_command(32, [0x01, 17])  # CMD_TRANSMIT_READY_LIMIT = 17
-
-            # 9. Přepnout do normálního režimu
-            self.send_command(3)  # NORMAL_MODE
-            
-            # 10. Nastavit režim registru Mode
-            self.send_command(18, [0x00, 0x00])  # WRITE_REG: Mode register (address 0) = 0x00
-
-            print("USB2CAN adaptér úšpěšně inicializován jako převodník.")
-        except Exception as e:
-            print(f"Chyba při konfiguraci: {e}")
-
-    def send_can_message(self, can_id, data):
-        """
-        Odešle CAN zprávu.
-        """
         try:
-            dlc = len(data)  # Data Length Code (DLC)
-            if dlc > 8:
-                raise ValueError("Délka datového pole nemůže být větší než 8 bajtů.")
-            
-            # Sestavení CAN zprávy s identifikátorem a daty
-            id_high = (can_id >> 3) & 0xFF  # Horní část identifikátoru (ID), 8 bitů
-            id_low = (can_id & 0x07) << 5  # Dolních 3 bity identifikátoru, posunuty vlevo o 5 bitů
-            frame_info = dlc  # Standardní rámec, délka datového pole (DLC)
-            
-            message = [frame_info, id_high, id_low] + data  # Frame info, Identifier, a data
-            
-            length = len(message)  # Správná délka zprávy (včetně frame_info)
-            full_message = [self.START_BYTE, 0x40, length] + message  # Přidání START_BYTE a příkazu WRITE_MESSAGE
-            
-            self.ser.write(bytearray(full_message))
-            print(f"Odesílám CAN zprávu: {bytearray(full_message).hex()}")  # Přidán výpis odeslané CAN zprávy
-            print(f"CAN zpráva s ID {hex(can_id)} odeslána.")
-            time.sleep(0.05)  # Krátká pauza před čtením odpovědi
-            response = self.ser.read(self.ser.in_waiting)
-            print(f"Odpověď po odeslání CAN zprávy: {response.hex()}")  # Přidán výpis přijaté odpovědi
-            if response:
-                self.decode_can_response(response)  # Přeložení odpovědi do CAN zprávy
+            self.usb2can = USB2CAN(port, baud_rate)
+            self.usb2can.configure_usb2can()
+            self.update_status("Adaptér nakonfigurován", "green")
         except Exception as e:
-            print(f"Chyba při odesílání CAN zprávy: {e}")
+            self.update_status(f"Chyba při konfiguraci: {e}", "red")
 
-    def decode_can_response(self, response):
-        """
-        Přeloží odpověď ze sériového portu do podoby CAN zprávy.
-        """
+    def send_can_message(self):
+        if not self.usb2can:
+            messagebox.showwarning("Chyba", "Adaptér není nakonfigurován.")
+            return
+
         try:
-            if len(response) >= 5:
-                command = response[1]
-                length = response[2]
-                data = response[3:3+length]
-                print(f"Přijatá CAN zpráva (přeložená): Command: {command}, Data: {data.hex()}")
-            else:
-                print("Neplatná odpověď.")
+            self.usb2can.send_can_message(0x11, [1, 2, 3, 4, 5 ,6 , 7, 8])
+            self.update_status("CAN zpráva odeslána", "green")
         except Exception as e:
-            print(f"Chyba při dekódování odpovědi: {e}")
+            self.update_status(f"Chyba při odesílání CAN zprávy: {e}", "red")
 
     def read_can_message(self):
-        """
-        Přečte CAN zprávu z adaptéru pomocí příkazu READ_MESSAGE.
-        """
+        if not self.usb2can:
+            messagebox.showwarning("Chyba", "Adaptér není nakonfigurován.")
+            return
+
         try:
-            self.send_command(65)  # READ_MESSAGE command
-            data = self.ser.read(self.ser.in_waiting)  # Číst všechna dostupná data
-            if data:
-                print(f"Přijatá CAN zpráva: {data.hex()}")
-                return data
-            else:
-                print("Žádná CAN zpráva nebyla přijata.")
+            self.usb2can.read_can_message()
+            self.update_status("CAN zpráva přečtena", "green")
         except Exception as e:
-            print(f"Chyba při čtení CAN zprávy: {e}")
-        return None
+            self.update_status(f"Chyba při čtení CAN zprávy: {e}", "red")
 
-    def reset_usb2can(self):
-        """
-        Resetuje USB2CAN adaptér.
-        """
-        try:
-            # Přepnout do konfiguračního módu
-            self.send_command(2)  # CONFIG_MODE
-            self.send_command(1)  # BOOT_MODE
-            # Resetovat adaptér
-            self.send_command(18, [0x00, 0x01])  # WRITE_REG: Mode register (address 0) = 0x01 (reset mode)
-            print("Adaptér byl resetován.")
-        except Exception as e:
-            print(f"Chyba při resetování adaptéru: {e}")
+    def disconnect_adapter(self):
+        if self.usb2can:
+            try:
+                self.usb2can.close()
+                self.update_status("Adaptér odpojen", "blue")
+                self.usb2can = None
+            except Exception as e:
+                self.update_status(f"Chyba při odpojování: {e}", "red")
 
-    def close(self):
-        """
-        Uzavře sériové spojení.
-        """
-        self.reset_usb2can()  # Reset před odpojením
-        if self.ser and self.ser.is_open:
-            self.ser.close()
-
-# Funkce pro získání seznamu sériových portů
-def get_serial_ports():
-    import serial.tools.list_ports
-    ports = serial.tools.list_ports.comports()
-    return [port.device for port in ports]
-
-# Příklad použití knihovny
+# Hlavní běh aplikace
 if __name__ == "__main__":
-    port = "COM5"
-    baud_rate = 500000  # Zvýšená rychlost
-    usb2can = USB2CAN(port, baud_rate)
-    usb2can.configure_usb2can()
-    
-    # Odeslat kombinované heslo
-    usb2can.send_can_message(0x11, [0xFE, 0xED, 0xFA, 0xCE, 0xCA, 0xFE, 0xBE, 0xEF])
-    
-    # Opakované načítání odpovědi
-    for _ in range(10):
-        response = usb2can.read_can_message()
-        if response:
-            print(f"Odpověď: {response.hex()}")
-        time.sleep(0.001)  # Krátká pauza mezi pokusy o čtení
-    
-    usb2can.close()
+    root = tk.Tk()
+    app = FirmwareUploaderApp(root)
+    root.mainloop()

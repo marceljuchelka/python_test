@@ -6,6 +6,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 import serial
 import time
 
+
 class USB2CAN:
     def __init__(self, port, baudrate=115200):
         self.ser = serial.Serial(port, baudrate, timeout=1)
