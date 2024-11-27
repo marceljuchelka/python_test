@@ -1,4 +1,4 @@
-#knihovna pro usb2can
+#knihovna pro usb2can bez verbose
 
 # -*- coding: utf-8 -*-
 import sys

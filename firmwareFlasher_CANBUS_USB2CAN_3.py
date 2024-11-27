@@ -61,7 +61,7 @@ class FirmwareUploaderApp:
         try:
             port = self.port_var.get()
             baud_rate = int(self.baud_rate_var.get())
-            self.device = USB2CAN(port, baud_rate)
+            self.device = USB2CAN(port, baudrate=baud_rate)  # Použití verbose=False při připojení
             self.device.configure_usb2can()
             self.update_status("Připojeno k USB2CAN", "green")
         except Exception as e:
