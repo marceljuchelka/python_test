@@ -37,10 +37,10 @@ class FirmwareUploaderApp:
         
         
         tk.Button(root, text="Odeslat firmware", command=self.start_send_firmware_thread).grid(row=6, column=0, columnspan=2, pady=10)
-        tk.Button(root, text="Odpojit zařízení", command=self.disconnect_device).grid(row=6, column=1, pady=10)
+        tk.Button(root, text="Odpojit zařízení", command=self.disconnect_device).grid(row=8, column=0, columnspan=2, pady=10)
 
         self.status_label = tk.Label(root, text="Stav: Čekání na akci", fg="blue")
-        self.status_label.grid(row=7, column=0, columnspan=2, pady=5)
+        self.status_label.grid(row=9, column=0, columnspan=2, pady=5)
 
     def update_status(self, text, color="blue"):
         self.status_label.config(text=f"Stav: {text}", fg=color)
