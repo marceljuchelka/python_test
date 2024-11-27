@@ -104,7 +104,7 @@ class FirmwareUploaderApp:
                     bytes_sent += len(chunk)
                     self.progress["value"] = bytes_sent
                     self.update_status(f"Odesláno {bytes_sent} / {file_size} bajtů", "orange")
-                    time.sleep(0.01)
+                    time.sleep(0.003)
 
             self.update_status("Odesílání dokončeno", "green")
         except Exception as e:
