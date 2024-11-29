@@ -34,8 +34,6 @@ class FirmwareUploaderApp:
         self.progress = ttk.Progressbar(root, orient="horizontal", length=300, mode="determinate")
         self.progress.grid(row=5, column=0, columnspan=2, pady=10)
 
-        
-        
         tk.Button(root, text="Odeslat firmware", command=self.start_send_firmware_thread).grid(row=6, column=0, columnspan=2, pady=10)
         tk.Button(root, text="Odpojit zařízení", command=self.disconnect_device).grid(row=8, column=0, columnspan=2, pady=10)
 
