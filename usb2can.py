@@ -22,9 +22,6 @@ class USB2CAN:
         # Přidán výpis odeslaných dat
         print(f"Odesílám: {bytearray(message).hex()}")
         time.sleep(0.1)
-        response = self.ser.read(self.ser.in_waiting)
-        print(f"Odpověď ze send_command: {response.hex()}")
-        return response
 
     def configure_usb2can(self):
         """
@@ -33,50 +30,80 @@ class USB2CAN:
         try:
             # 1. Nastavit konfigurační mód
             self.send_command(2)  # CONFIG_MODE
+            time.sleep(0.1)
+            response = self.ser.read(self.ser.in_waiting)
+            print(f"Odpověď ze send_command: {response.hex()}")
 
             # 2. Reset mód
             # WRITE_REG: Mode register (address 0) = 0x01
             self.send_command(18, [0x00, 0x01])
+            response = self.ser.read(self.ser.in_waiting)
+            print(f"Odpověď ze send_command: {response.hex()}")
 
             # 3. Nastavit Clock Divider
             # WRITE_REG: Clock Divider (address 0x1C) = 0xC0
             self.send_command(18, [0x1C, 0xC0])
+            response = self.ser.read(self.ser.in_waiting)
+            print(f"Odpověď ze send_command: {response.hex()}")
 
             # 4. Nastavit filtry (žádné filtrování)
             # WRITE_REG: Acceptance Code (address 0x04) = 0x00
             self.send_command(18, [0x04, 0x00])
+            response = self.ser.read(self.ser.in_waiting)
+            print(f"Odpověď ze send_command: {response.hex()}")
+
             # WRITE_REG: Acceptance Mask (address 0x05) = 0xFF
             self.send_command(18, [0x05, 0xFF])
+            response = self.ser.read(self.ser.in_waiting)
+            print(f"Odpověď ze send_command: {response.hex()}")
 
             # 5. Nastavit Output Control
             # WRITE_REG: Output Control (address 0x1A) = 0xDA
             self.send_command(18, [0x1A, 0xDA])
+            response = self.ser.read(self.ser.in_waiting)
+            print(f"Odpověď ze send_command: {response.hex()}")
 
             # 6. Nastavit Interrupt Enable
             # WRITE_REG: Interrupt Enable (address 0x0C) = 0x03
             self.send_command(18, [0x0C, 0x03])
+            response = self.ser.read(self.ser.in_waiting)
+            print(f"Odpověď ze send_command: {response.hex()}")
 
             # 7. Nastavit Bus Timing
             # WRITE_REG: Bus Timing 0 (address 0x06) = 0x00
             self.send_command(18, [0x06, 0x00])
+            response = self.ser.read(self.ser.in_waiting)
+            print(f"Odpověď ze send_command: {response.hex()}")
             # WRITE_REG: Bus Timing 1 (address 0x07) = 0x1C
             self.send_command(18, [0x07, 0x1C])
+            response = self.ser.read(self.ser.in_waiting)
+            print(f"Odpověď ze send_command: {response.hex()}")
 
             # 8. Nastavit parametry CMD_TRANSMIT_CRITICAL_LIMIT a CMD_TRANSMIT_READY_LIMIT
             # CMD_TRANSMIT_CRITICAL_LIMIT = 18
             self.send_command(32, [0x00, 18])
+            response = self.ser.read(self.ser.in_waiting)
+            print(f"Odpověď ze send_command: {response.hex()}")
             self.send_command(32, [0x01, 17])  # CMD_TRANSMIT_READY_LIMIT = 17
+            response = self.ser.read(self.ser.in_waiting)
+            print(f"Odpověď ze send_command: {response.hex()}")
 
             # 9. Přepnout do normálního režimu
             self.send_command(3)  # NORMAL_MODE
+            response = self.ser.read(self.ser.in_waiting)
+            print(f"Odpověď ze send_command: {response.hex()}")
 
             # 10. Nastavit režim registru Mode
             # WRITE_REG: Mode register (address 0) = 0x00
             self.send_command(18, [0x00, 0x00])
+            response = self.ser.read(self.ser.in_waiting)
+            print(f"Odpověď ze send_command: {response.hex()}")
 
             print("USB2CAN adaptér úšpěšně inicializován jako převodník.")
         except Exception as e:
             print(f"Chyba při konfiguraci: {e}")
+            response = self.ser.read(self.ser.in_waiting)
+            print(f"Odpověď ze send_command: {response.hex()}")
 
     def send_can_message(self, can_id, data):
         """
